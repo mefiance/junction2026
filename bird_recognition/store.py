@@ -1,3 +1,8 @@
+"""
+SQLite storage (`birds.db`) for saving and querying detected bird Events
+and generating daily species summaries.
+"""
+
 import sqlite3
 
 from models import Event
@@ -10,14 +15,14 @@ class Store:
             event_id TEXT PRIMARY KEY,
             timestamp TEXT NOT NULL,
             species TEXT,
-            max_count INTEGER,
+            photos_count INTEGER,
             payload TEXT NOT NULL)""")
         self.db.commit()
 
     def save(self, event: Event) -> None:
         self.db.execute(
             "INSERT OR REPLACE INTO events VALUES (?, ?, ?, ?, ?)",
-            (event.event_id, event.timestamp, event.top_species(), event.max_count, event.to_json()),
+            (event.event_id, event.timestamp, event.top_species(), len(event.photos), event.to_json()),
         )
         self.db.commit()
 
@@ -36,11 +41,11 @@ class Store:
 
     def daily_summary(self, day: str) -> list[dict]:
         rows = self.db.execute(
-            """SELECT species, COUNT(*), SUM(max_count) FROM events
+            """SELECT species, COUNT(*) FROM events
                WHERE timestamp LIKE ? GROUP BY species ORDER BY COUNT(*) DESC""",
             (f"{day}%",),
         ).fetchall()
-        return [{"species": s, "events": n, "birds_seen": c or 0} for s, n, c in rows]
+        return [{"species": s, "events": n} for s, n in rows]
 
     def close(self) -> None:
         self.db.close()

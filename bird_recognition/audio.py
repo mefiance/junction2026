@@ -1,10 +1,16 @@
+"""
+Audio input streams (microphone or WAV file) and BirdNET v2.4 LiteRT classifier.
+Splits incoming audio into 3-second chunks and filters BirdNET species predictions
+by location (lat/lon) and current week of the year.
+"""
+
 import time
 from collections.abc import Iterator
 from datetime import date
 
 import numpy as np
 
-from models import AUDIO, Detection
+from models import Detection
 
 SAMPLE_RATE = 48000
 CHUNK_S = 3.0
@@ -89,7 +95,7 @@ class BirdNetClassifier:
         out = []
         for row in rows:
             scientific, common = parse_label(str(row["species_name"]))
-            out.append(Detection(AUDIO, scientific, round(float(row["confidence"]), 3), common))
+            out.append(Detection(scientific, round(float(row["confidence"]), 3), common))
         return out
 
     def close(self) -> None:

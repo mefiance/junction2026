@@ -1,3 +1,10 @@
+"""
+Main runtime loop (LivePipeline) and WAV file replay.
+Listens to 3-second audio chunks in a background thread, triggers the Pygmy Owl
+buzzer every 60s or when an endangered bird is heard, runs the 5-second camera photo burst
+only when a bird is detected, and saves completed events to birds.db.
+"""
+
 import queue
 import threading
 import time
@@ -65,6 +72,10 @@ class LivePipeline:
         on_event: EventSink = _ignore,
         log: DetectionLog = _ignore,
         clock: Callable[[], float] = time.monotonic,
+        lure_fn: Callable[[], bool] | None = None,
+        lure_interval_s: float | None = None,
+        lure_on_audio: bool = False,
+        lure_cooldown_s: float = 30.0,
     ):
         self.source = source
         self.classifier = classifier
@@ -75,9 +86,14 @@ class LivePipeline:
         self.on_event = on_event
         self.log = log
         self.clock = clock
+        self.lure_fn = lure_fn
+        self.lure_interval_s = lure_interval_s
+        self.lure_on_audio = lure_on_audio
+        self.lure_cooldown_s = lure_cooldown_s
         self.detections: queue.Queue = queue.Queue()
         self.stop = threading.Event()
         self.started = clock()
+        self.last_lure_at: float | None = None
 
     def run(self) -> None:
         listener = threading.Thread(target=self._listen, daemon=True)
@@ -90,17 +106,53 @@ class LivePipeline:
         finally:
             finish(self.builder, self.store, self.on_event)
 
+    def _trigger_lure(self, now: float) -> None:
+        if self.lure_fn is None:
+            return
+        self.last_lure_at = now
+        self.builder.on_playback(True, now)
+        try:
+            self.lure_fn()
+        finally:
+            after = self.clock()
+            self.builder.on_playback(False, after)
+            self.last_lure_at = after
+
+    def _can_lure(self, now: float) -> bool:
+        if self.lure_fn is None:
+            return False
+        return self.last_lure_at is None or (now - self.last_lure_at) >= self.lure_cooldown_s
+
     def step(self) -> None:
         now = self.clock()
         if self.playback_flag is not None:
             self.builder.on_playback(self.playback_flag.exists(), now)
+
+        # Every 60s: play owl buzzer to attract birds (camera stays OFF until a bird is heard)
+        if (
+            self.lure_interval_s is not None
+            and self.lure_fn is not None
+            and not self.builder.camera_active(now)
+            and (self.last_lure_at is None or (now - self.last_lure_at) >= self.lure_interval_s)
+        ):
+            self._trigger_lure(now)
+            now = self.clock()
+
+        heard_target = False
         while True:
             try:
                 detections = self.detections.get_nowait()
             except queue.Empty:
                 break
             self.log(now - self.started, detections)
-            self.builder.on_audio(detections, now)
+            if self.builder.on_audio(detections, now) and self.builder.take_photos:
+                heard_target = True
+
+        # If an endangered bird was heard, play owl call to pull it closer, then camera takes burst
+        if heard_target and self.lure_on_audio and self._can_lure(now):
+            self._trigger_lure(now)
+            now = self.clock()
+
         if self.camera is not None:
             if self.builder.camera_active(now):
                 self.camera.step(self.builder, now)
