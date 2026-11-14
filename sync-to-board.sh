@@ -30,12 +30,14 @@ if ! "$ADB" get-state >/dev/null 2>&1; then
 fi
 
 echo "Pushing local files to Arduino UNO Q (${REMOTE_DIR})..."
-"$ADB" shell "mkdir -p ${REMOTE_DIR}/sketch ${REMOTE_DIR}/python"
+"$ADB" shell "mkdir -p ${REMOTE_DIR}/sketch ${REMOTE_DIR}/python ${REMOTE_DIR}/bird_recognition"
 "$ADB" push "${SCRIPT_DIR}/app.yaml" "${REMOTE_DIR}/app.yaml"
 "$ADB" push "${SCRIPT_DIR}/.gitignore" "${REMOTE_DIR}/.gitignore"
 "$ADB" push "${SCRIPT_DIR}/README.md" "${REMOTE_DIR}/README.md"
+"$ADB" push "${SCRIPT_DIR}/endangered_mobbers.json" "${REMOTE_DIR}/endangered_mobbers.json"
 "$ADB" push "${SCRIPT_DIR}/sketch/sketch.ino" "${REMOTE_DIR}/sketch/sketch.ino"
 "$ADB" push "${SCRIPT_DIR}/sketch/sketch.yaml" "${REMOTE_DIR}/sketch/sketch.yaml"
 "$ADB" push "${SCRIPT_DIR}/python/main.py" "${REMOTE_DIR}/python/main.py"
+"$ADB" push "${SCRIPT_DIR}/bird_recognition/." "${REMOTE_DIR}/bird_recognition/"
 
 echo "Done! Arduino App Lab is now synced with your local repo."

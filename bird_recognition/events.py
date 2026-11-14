@@ -1,8 +1,14 @@
+"""
+Groups individual audio detections into time-windowed Events.
+Also masks out Pygmy Owl detections while our own buzzer is playing,
+attaches temperature/humidity readings, and controls when the camera is active.
+"""
+
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 
-from models import VIDEO, Detection, Event
+from models import Detection, Event
 
 OWL = "Glaucidium passerinum"
 
@@ -16,19 +22,21 @@ class EventBuilder:
         self,
         window_s: float = 45.0,
         min_confidence: float = 0.5,
-        photo_interval_s: float = 2.0,
         owl_mask_s: float = 3.0,
         location: dict | None = None,
+        weather_fn: Callable[[], dict | None] | None = None,
+        mobbers: dict[str, str] | set[str] | None = None,
     ):
         self.window_s = window_s
         self.min_confidence = min_confidence
-        self.photo_interval_s = photo_interval_s
         self.owl_mask_s = owl_mask_s
         self.location = location
+        self.weather_fn = weather_fn
+        self.mobbers = mobbers
         self.current: Event | None = None
         self.camera_until = 0.0
+        self.take_photos = False
         self.opened_at = 0.0
-        self.last_photo_at: float | None = None
         self.ready: list[Event] = []
         self.playback: dict | None = None
         self.playing = False
@@ -57,30 +65,17 @@ class EventBuilder:
         for d in keep:
             d.t_offset_s = round(now - self.opened_at, 2)
         self.current.detections.extend(keep)
+        if self.mobbers is None or any(d.species in self.mobbers for d in keep):
+            self.take_photos = True
         self.camera_until = now + self.window_s
         return True
 
-    def on_frame(
-        self,
-        confidences: list[float],
-        now: float,
-        save_photo: Callable[[], str] | None = None,
-    ) -> None:
-        if not self.camera_active(now) or not confidences:
-            return
-        self.current.max_count = max(self.current.max_count, len(confidences))
-        if save_photo is None:
-            return
-        if self.last_photo_at is not None and now - self.last_photo_at < self.photo_interval_s:
-            return
-        self.last_photo_at = now
-        self.current.detections.append(Detection(
-            VIDEO, "bird", round(max(confidences), 3),
-            t_offset_s=round(now - self.opened_at, 2), photo=save_photo(),
-        ))
+    def add_photo(self, photo_path: str) -> None:
+        if self.current is not None:
+            self.current.photos.append(photo_path)
 
     def camera_active(self, now: float) -> bool:
-        return self.current is not None and now < self.camera_until
+        return self.current is not None and self.take_photos and now < self.camera_until
 
     def tick(self, now: float) -> Event | None:
         self._close_if_expired(now)
@@ -95,15 +90,19 @@ class EventBuilder:
 
     def _open(self, now: float) -> None:
         stamp = utc_now()
+        weather = self.weather_fn() if self.weather_fn is not None else None
         self.current = Event(
-            f"{stamp}-{uuid.uuid4().hex[:6]}", stamp,
+            f"{stamp}-{uuid.uuid4().hex[:6]}",
+            stamp,
             location=self.location,
             playback=self.playback if self.masked(now) else None,
+            weather=weather,
         )
         self.opened_at = now
-        self.last_photo_at = None
+        self.take_photos = False
 
     def _close_if_expired(self, now: float) -> None:
         if self.current is not None and now >= self.camera_until:
             self.ready.append(self.current)
             self.current = None
+            self.take_photos = False

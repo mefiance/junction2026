@@ -1,9 +1,9 @@
 from events import OWL, EventBuilder
-from models import AUDIO, Detection
+from models import Detection
 
 
 def tit(conf=0.9, species="Parus major"):
-    return [Detection(AUDIO, species, conf)]
+    return [Detection(species, conf)]
 
 
 def test_low_and_equal_confidence_ignored():
@@ -38,20 +38,6 @@ def test_late_audio_without_tick_starts_new_event():
     assert second.detections[0].t_offset_s == 0.0
 
 
-def test_frames_count_max_and_throttle_photos():
-    b = EventBuilder(window_s=10, min_confidence=0.5, photo_interval_s=2)
-    photos = iter(f"p{i}.jpg" for i in range(10))
-    b.on_frame([0.9], now=0, save_photo=lambda: next(photos))
-    b.on_audio(tit(), now=0)
-    b.on_frame([0.8], now=1, save_photo=lambda: next(photos))
-    b.on_frame([0.8, 0.7, 0.6], now=2, save_photo=lambda: next(photos))
-    b.on_frame([0.8, 0.7], now=3.5, save_photo=lambda: next(photos))
-    b.on_frame([], now=4, save_photo=lambda: next(photos))
-    event = b.tick(10)
-    assert event.max_count == 3
-    assert [d.photo for d in event.detections if d.photo] == ["p0.jpg", "p1.jpg"]
-
-
 def test_owl_masked_during_playback_and_after():
     b = EventBuilder(window_s=10, min_confidence=0.5, owl_mask_s=3)
     b.on_playback(True, now=0)
@@ -67,3 +53,49 @@ def test_event_records_playback():
     b.on_audio(tit(), now=1)
     event = b.tick(11)
     assert event.playback["species"] == OWL
+
+
+def test_burst_camera_takes_2fps_for_5s_and_attaches_weather(tmp_path):
+    from vision import BurstCamera
+
+    class FakeSource:
+        def grab(self):
+            pass
+
+        def read(self):
+            return b"frame"
+
+        def close(self):
+            pass
+
+    class TestBurstCamera(BurstCamera):
+        def save_photo(self, frame, event_id: str, index: int) -> str:
+            p = self.photo_dir / f"{event_id}_{index:02d}.jpg"
+            self.photo_dir.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(frame)
+            return str(p)
+
+    b = EventBuilder(
+        window_s=10,
+        min_confidence=0.5,
+        weather_fn=lambda: {"temperature_c": 11.2, "humidity_rh": 68.0},
+        mobbers={"Poecile montanus": "Willow Tit"},
+    )
+    cam = TestBurstCamera(FakeSource(), photo_dir=str(tmp_path), fps=2.0, duration_s=5.0)
+
+    # Common bird heard -> logged, but camera stays OFF
+    b.on_audio(tit(0.9, "Parus major"), now=0.0)
+    assert not b.camera_active(0.0)
+
+    # Endangered mobber heard -> camera turns ON and takes 2 fps * 5s = 10 photos
+    b.on_audio(tit(0.9, "Poecile montanus"), now=1.0)
+    assert b.camera_active(1.0)
+    t = 1.0
+    while t <= 7.0:
+        cam.step(b, now=t)
+        t += 0.25
+
+    event = b.tick(12.0)
+    assert event is not None
+    assert event.weather == {"temperature_c": 11.2, "humidity_rh": 68.0}
+    assert len(event.photos) == 10

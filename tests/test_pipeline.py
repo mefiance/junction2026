@@ -1,7 +1,7 @@
 import numpy as np
 
 from events import EventBuilder
-from models import AUDIO, Detection
+from models import Detection
 from pipeline import LivePipeline, replay
 from store import Store
 
@@ -12,7 +12,7 @@ class ScriptedClassifier:
 
     def classify(self, chunk, sr):
         species = self.script.pop(0)
-        return [Detection(AUDIO, species, 0.9)] if species else []
+        return [Detection(species, 0.9)] if species else []
 
 
 def silent_chunks(n):

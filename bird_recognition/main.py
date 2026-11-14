@@ -1,18 +1,33 @@
+"""
+CLI entry point for the bird recognition & owl-lure system.
+Connects the microphone (BirdNET), USB camera (2 fps x 5s burst), SQLite store,
+and Arduino UNO Q hardware (buzzer + temperature/humidity sensor).
+"""
+
 import argparse
-import json
 import sys
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 
-from models import Detection, Event
+from models import Detection, Event, load_endangered_mobbers
 from store import Store
 
+# Default configuration
+LAT = 61.4978
+LON = 23.761
+PLACE = "Tampere"
+MIN_CONF = 0.5
+WINDOW_S = 15.0
+LURE_INTERVAL_S = 60.0
+LURE_NOTES = 4
+BURST_FPS = 2.0
+BURST_SECONDS = 5.0
+PHOTO_DIR = "photos"
+BUNDLE_DIR = "captures"
+DB_PATH = "birds.db"
+
 PLAYBACK_FLAG = Path(tempfile.gettempdir()) / "bird_monitor_playback"
-
-
-def device_arg(value: str) -> int | str:
-    return int(value) if value.isdigit() else value
+MOBBERS = load_endangered_mobbers()
 
 
 def print_event(event: Event) -> None:
@@ -21,7 +36,8 @@ def print_event(event: Event) -> None:
 
 def print_detections(t: float, detections: list[Detection]) -> None:
     for d in detections:
-        print(f"{t:8.1f}s  {d.species} ({d.common_name})  {d.confidence:.2f}", file=sys.stderr, flush=True)
+        tag = " [ENDANGERED]" if d.species in MOBBERS else ""
+        print(f"{t:8.1f}s  {d.species} ({d.common_name})  {d.confidence:.2f}{tag}", file=sys.stderr, flush=True)
 
 
 def debug_detections(t: float, detections: list[Detection]) -> None:
@@ -39,35 +55,81 @@ def with_levels(source):
         yield chunk, sr
 
 
-def cmd_run(args: argparse.Namespace) -> None:
+def make_camera(camera_index: int | str = 0):
+    from vision import BurstCamera, CvSource
+    idx = int(camera_index) if str(camera_index).isdigit() else camera_index
+    return BurstCamera(
+        CvSource(idx),
+        photo_dir=PHOTO_DIR,
+        fps=BURST_FPS,
+        duration_s=BURST_SECONDS,
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="bird-monitor")
+    parser.add_argument("--wav", help="Test with a WAV file instead of live microphone")
+    parser.add_argument("--no-camera", action="store_true", help="Disable USB camera capture")
+    parser.add_argument("--camera-index", default="0", help="USB camera index (default: 0)")
+    parser.add_argument("--debug", action="store_true", help="Print audio levels and low-confidence detections")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
     from audio import BirdNetClassifier, FileSource, MicSource
+    from bundle import UnoQHardware, save_event_bundle
     from events import EventBuilder
     from pipeline import LivePipeline, replay
 
-    location = {"lat": args.lat, "lon": args.lon, "name": args.place}
-    use_geo = not args.no_geo
+    args = build_parser().parse_args(argv)
+    location = {"lat": LAT, "lon": LON, "name": PLACE}
+    hw = UnoQHardware(playback_flag=PLAYBACK_FLAG)
+
     print("loading BirdNET...", file=sys.stderr, flush=True)
     classifier = BirdNetClassifier(
-        args.lat if use_geo else None, args.lon if use_geo else None,
-        min_confidence=0.05 if args.debug else args.min_conf,
+        LAT, LON,
+        min_confidence=0.05 if args.debug else MIN_CONF,
     )
-    builder = EventBuilder(window_s=args.window, min_confidence=args.min_conf, location=location)
-    store = Store(args.db)
+    builder = EventBuilder(
+        window_s=WINDOW_S,
+        min_confidence=MIN_CONF,
+        location=location,
+        weather_fn=hw.read_weather,
+        mobbers=MOBBERS,
+    )
+    store = Store(DB_PATH)
     log = debug_detections if args.debug else print_detections
+
+    def handle_event(event: Event) -> None:
+        if event.endangered_species(MOBBERS):
+            zip_path = save_event_bundle(event, bundle_dir=BUNDLE_DIR, mobbers=MOBBERS)
+            print(f"saved endangered bundle: {zip_path}", file=sys.stderr, flush=True)
+        print_event(event)
+
     try:
-        if args.wav and not args.realtime:
-            saved = replay(FileSource(args.wav), classifier, builder, store, print_event, log)
-            print(f"saved {saved} events to {args.db}", file=sys.stderr)
+        if args.wav:
+            saved = replay(FileSource(args.wav), classifier, builder, store, handle_event, log)
+            print(f"saved {saved} events to {DB_PATH}", file=sys.stderr)
             return
-        source = FileSource(args.wav, realtime=True) if args.wav else MicSource(args.mic_device, args.mic_rate)
+
+        source = MicSource()
         if args.debug:
             source = with_levels(source)
-        camera = make_camera(args) if args.camera else None
+        camera = None if args.no_camera else make_camera(args.camera_index)
         print("listening, Ctrl+C to stop", file=sys.stderr, flush=True)
         try:
             LivePipeline(
-                source, classifier, builder, store, camera=camera,
-                playback_flag=PLAYBACK_FLAG, on_event=print_event, log=log,
+                source,
+                classifier,
+                builder,
+                store,
+                camera=camera,
+                playback_flag=PLAYBACK_FLAG,
+                on_event=handle_event,
+                log=log,
+                lure_fn=(lambda: hw.play_owl_lure(LURE_NOTES)) if hw.bridge is not None else None,
+                lure_interval_s=LURE_INTERVAL_S,
+                lure_on_audio=True,
             ).run()
         except KeyboardInterrupt:
             pass
@@ -77,69 +139,6 @@ def cmd_run(args: argparse.Namespace) -> None:
     finally:
         classifier.close()
         store.close()
-
-
-def make_camera(args: argparse.Namespace):
-    from vision import Camera, CvSource, YoloDetector
-    return Camera(CvSource(device_arg(args.camera_index)), YoloDetector(), args.photo_dir)
-
-
-def cmd_summary(args: argparse.Namespace) -> None:
-    store = Store(args.db)
-    out = {"day": args.day, "summary": store.daily_summary(args.day)}
-    if args.events:
-        out["events"] = [json.loads(e.to_json()) for e in store.events_on(args.day)]
-    store.close()
-    print(json.dumps(out, ensure_ascii=False, indent=2))
-
-
-def cmd_playback(args: argparse.Namespace) -> None:
-    if args.action == "start":
-        PLAYBACK_FLAG.touch()
-    else:
-        PLAYBACK_FLAG.unlink(missing_ok=True)
-    print(f"playback {args.action}: {PLAYBACK_FLAG}")
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="bird-monitor")
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    run = sub.add_parser("run")
-    src = run.add_mutually_exclusive_group(required=True)
-    src.add_argument("--wav")
-    src.add_argument("--mic", action="store_true")
-    run.add_argument("--realtime", action="store_true")
-    run.add_argument("--mic-device", type=device_arg)
-    run.add_argument("--mic-rate", type=int, default=48000)
-    run.add_argument("--camera", action="store_true")
-    run.add_argument("--camera-index", default="0")
-    run.add_argument("--photo-dir", default="photos")
-    run.add_argument("--lat", type=float, default=61.4978)
-    run.add_argument("--lon", type=float, default=23.761)
-    run.add_argument("--place", default="Tampere")
-    run.add_argument("--no-geo", action="store_true")
-    run.add_argument("--window", type=float, default=45.0)
-    run.add_argument("--min-conf", type=float, default=0.5)
-    run.add_argument("--db", default="birds.db")
-    run.add_argument("--debug", action="store_true")
-    run.set_defaults(func=cmd_run)
-
-    summary = sub.add_parser("summary")
-    summary.add_argument("--day", default=datetime.now(timezone.utc).strftime("%Y-%m-%d"))
-    summary.add_argument("--events", action="store_true")
-    summary.add_argument("--db", default="birds.db")
-    summary.set_defaults(func=cmd_summary)
-
-    playback = sub.add_parser("playback")
-    playback.add_argument("action", choices=["start", "stop"])
-    playback.set_defaults(func=cmd_playback)
-    return parser
-
-
-def main(argv: list[str] | None = None) -> None:
-    args = build_parser().parse_args(argv)
-    args.func(args)
 
 
 if __name__ == "__main__":
