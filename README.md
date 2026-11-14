@@ -4,23 +4,20 @@
 
 ```mermaid
 flowchart TD
-    subgraph MCU["STM32 MCU (Arduino)"]
-        direction LR
-        Thermo["Modulino Thermo\n(Temp & %RH)"]
-        Buzzer["Modulino Buzzer\n(1412 Hz Owl Call)"]
+    subgraph MCU["STM32 MCU"]
+        Thermo["Modulino Thermo"]
+        Buzzer["Modulino Buzzer"]
     end
-
-    subgraph Linux["QRB2210 Linux (Python)"]
-        Mic["USB Mic"] --> BirdNET["BirdNET AI\n(3s chunks)"]
-        BirdNET -->|All birds| DB[("birds.db")]
-        BirdNET -->|Endangered species| Trigger["Lure + 5s Burst"]
-        Trigger --><|end|>Bridge RPC| Buzzer
-        Trigger --> Cam["USB Camera\n(2 fps × 5s)"]
-        Thermo -.-><|end|>Safe weather & metadata| Trigger
-        Cam --> Zip["captures/*.zip\n(10 JPGs + metadata.json)"]
+    subgraph Linux["QRB2210 Linux"]
+        Mic["USB Mic"] --> BirdNET["BirdNET AI"]
+        BirdNET -->|all birds| DB[("birds.db")]
+        BirdNET -->|endangered| Trigger["Lure + burst"]
+        Trigger --> Buzzer
+        Trigger --> Cam["USB Camera"]
+        Cam --> Zip["captures.zip"]
     end
-
-    Timer["60s Timer"] -->|Bridge RPC| Buzzer
+    Timer["60s Timer"] --> Buzzer
+    Thermo -.-> Trigger
 ```
 
 ## Project Structure
