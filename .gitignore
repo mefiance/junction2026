@@ -5,3 +5,10 @@
 .DS_Store
 .idea
 CLAUDE.md
+
+__pycache__/
+.pytest_cache/
+*.db
+photos/
+*.pt
+*.log

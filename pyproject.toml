@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+pythonpath = ["bird_recognition"]
+testpaths = ["tests"]
+markers = ["birdnet: needs the birdnet package and downloads the model"]
