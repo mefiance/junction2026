@@ -1,2 +1,7 @@
 # ignore app cache folder
 .cache/
+.claude
+.venv
+.DS_Store
+.idea
+CLAUDE.md
