@@ -6,10 +6,14 @@ the Arduino UNO Q sketch (Modulino Thermo & Buzzer) over Bridge.
 
 import json
 import shutil
+import sys
 import zipfile
 from pathlib import Path
 
 from models import Event, load_endangered_mobbers, load_mobber_statuses
+
+MIN_SAFE_TEMP_C = -5.0
+MAX_SAFE_HUMIDITY_RH = 95.0
 
 
 def save_event_bundle(
@@ -85,12 +89,17 @@ class UnoQHardware:
 
     def read_weather(self) -> dict | None:
         if self.bridge is None:
+            print("[thermo] no bridge", file=sys.stderr, flush=True)
             return None
         try:
-            temp = float(self.bridge.call("get_temperature", timeout=2))
-            hum = float(self.bridge.call("get_humidity", timeout=2))
-            return {"temperature_c": round(temp, 2), "humidity_rh": round(hum, 2)}
-        except Exception:
+            temp = round(float(self.bridge.call("get_temperature", timeout=2)), 2)
+            hum = round(float(self.bridge.call("get_humidity", timeout=2)), 2)
+            safe = temp >= MIN_SAFE_TEMP_C and hum <= MAX_SAFE_HUMIDITY_RH
+            decision = "safe" if safe else "unsafe"
+            print(f"[thermo] {temp}C, {hum}% RH -> {decision}", file=sys.stderr, flush=True)
+            return {"temperature_c": temp, "humidity_rh": hum}
+        except Exception as exc:
+            print(f"[thermo] read failed ({exc})", file=sys.stderr, flush=True)
             return None
 
     def play_owl_lure(self, notes: int = 3) -> bool:
@@ -99,12 +108,20 @@ class UnoQHardware:
             self.playback_flag.touch()
         try:
             if self.bridge is None:
+                print("[buzzer] no bridge", file=sys.stderr, flush=True)
                 return False
+            print(f"[buzzer] playing {int(notes)} notes...", file=sys.stderr, flush=True)
             # Each whistle note + pause takes ~2.2s on the MCU; allow generous timeout
             timeout = max(5.0, notes * 2.6 + 3.0)
             res = self.bridge.call("play_owl_bout", int(notes), timeout=timeout)
-            return bool(res)
-        except Exception:
+            ok = bool(res)
+            if ok:
+                print("[buzzer] done", file=sys.stderr, flush=True)
+            else:
+                print("[thermo] unsafe weather -> buzzer blocked", file=sys.stderr, flush=True)
+            return ok
+        except Exception as exc:
+            print(f"[buzzer] failed ({exc})", file=sys.stderr, flush=True)
             return False
         finally:
             if self.playback_flag is not None:

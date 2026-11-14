@@ -6,6 +6,7 @@ only when a bird is detected, and saves completed events to birds.db.
 """
 
 import queue
+import sys
 import threading
 import time
 from collections.abc import Callable, Iterable
@@ -135,6 +136,7 @@ class LivePipeline:
             and not self.builder.camera_active(now)
             and (self.last_lure_at is None or (now - self.last_lure_at) >= self.lure_interval_s)
         ):
+            print("[buzzer] periodic lure", file=sys.stderr, flush=True)
             self._trigger_lure(now)
             now = self.clock()
 
@@ -150,6 +152,7 @@ class LivePipeline:
 
         # If an endangered bird was heard, play owl call to pull it closer, then camera takes burst
         if heard_target and self.lure_on_audio and self._can_lure(now):
+            print("[buzzer] target heard -> luring", file=sys.stderr, flush=True)
             self._trigger_lure(now)
             now = self.clock()
 

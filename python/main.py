@@ -26,22 +26,30 @@ _pipeline_attempted = False
 
 def read_weather() -> dict | None:
     try:
-        temp = float(Bridge.call("get_temperature", timeout=2))
-        hum = float(Bridge.call("get_humidity", timeout=2))
-        return {"temperature_c": round(temp, 2), "humidity_rh": round(hum, 2)}
+        temp = round(float(Bridge.call("get_temperature", timeout=2)), 2)
+        hum = round(float(Bridge.call("get_humidity", timeout=2)), 2)
+        decision = "safe" if (temp >= -5.0 and hum <= 95.0) else "unsafe"
+        print(f"[thermo] {temp}C, {hum}% RH -> {decision}", flush=True)
+        return {"temperature_c": temp, "humidity_rh": hum}
     except Exception as exc:
-        print(f"[Bridge] weather read warning: {exc}", flush=True)
+        print(f"[thermo] read failed ({exc})", flush=True)
         return None
 
 
 def play_owl_lure(notes: int = LURE_NOTES) -> bool:
     PLAYBACK_FLAG.touch()
     try:
+        print(f"[buzzer] playing {int(notes)} notes...", flush=True)
         timeout = max(5.0, notes * 2.6 + 3.0)
         res = Bridge.call("play_owl_bout", int(notes), timeout=timeout)
-        return bool(res)
+        ok = bool(res)
+        if ok:
+            print("[buzzer] done", flush=True)
+        else:
+            print("[thermo] unsafe weather -> buzzer blocked", flush=True)
+        return ok
     except Exception as exc:
-        print(f"[Bridge] play_owl_bout warning: {exc}", flush=True)
+        print(f"[buzzer] failed ({exc})", flush=True)
         return False
     finally:
         PLAYBACK_FLAG.unlink(missing_ok=True)

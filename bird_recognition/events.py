@@ -4,6 +4,7 @@ Also masks out Pygmy Owl detections while our own buzzer is playing,
 attaches temperature/humidity readings, and controls when the camera is active.
 """
 
+import sys
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -53,10 +54,14 @@ class EventBuilder:
         return self.playing or now < self.mask_until
 
     def on_audio(self, detections: list[Detection], now: float) -> bool:
-        keep = [
-            d for d in detections
-            if d.confidence > self.min_confidence and not (d.species == OWL and self.masked(now))
-        ]
+        keep = []
+        for d in detections:
+            if d.confidence <= self.min_confidence:
+                continue
+            if d.species == OWL and self.masked(now):
+                print("[mic] masked self owl call", file=sys.stderr, flush=True)
+                continue
+            keep.append(d)
         if not keep:
             return False
         self._close_if_expired(now)
@@ -66,6 +71,8 @@ class EventBuilder:
             d.t_offset_s = round(now - self.opened_at, 2)
         self.current.detections.extend(keep)
         if self.mobbers is None or any(d.species in self.mobbers for d in keep):
+            if not self.take_photos:
+                print(f"[event] target detected => camera ON ({self.current.event_id})", file=sys.stderr, flush=True)
             self.take_photos = True
         self.camera_until = now + self.window_s
         return True
