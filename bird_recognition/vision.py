@@ -3,6 +3,7 @@ USB camera capture module.
 Provides BurstCamera (lightweight OpenCV capture: 2 photos/sec for 5 seconds = 10 JPEGs)
 """
 
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -78,6 +79,9 @@ class BurstCamera:
         self._shots_taken += 1
         saved = self.save_photo(frame, builder.current.event_id, self._shots_taken)
         builder.add_photo(saved)
+        print(f"[cam] shot {self._shots_taken}/{self.max_photos} -> {saved}", file=sys.stderr, flush=True)
+        if self._shots_taken >= self.max_photos:
+            print(f"[cam] burst done ({self._shots_taken}/{self.max_photos})", file=sys.stderr, flush=True)
 
     def capture_burst(self, event_id: str | None = None) -> list[str]:
         """Synchronously capture `max_photos` frames at `fps` rate."""
@@ -87,11 +91,14 @@ class BurstCamera:
             t0 = time.monotonic()
             frame = self.source.read()
             if frame is not None:
-                paths.append(self.save_photo(frame, tag, idx))
+                saved = self.save_photo(frame, tag, idx)
+                paths.append(saved)
+                print(f"[cam] shot {idx}/{self.max_photos} -> {saved}", file=sys.stderr, flush=True)
             if idx < self.max_photos:
                 elapsed = time.monotonic() - t0
                 if elapsed < self.interval_s:
                     time.sleep(self.interval_s - elapsed)
+        print(f"[cam] burst done ({len(paths)}/{self.max_photos})", file=sys.stderr, flush=True)
         return paths
 
     def save_photo(self, frame, event_id: str, index: int) -> str:

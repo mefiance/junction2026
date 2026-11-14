@@ -38,12 +38,12 @@ def print_event(event: Event) -> None:
 def print_detections(t: float, detections: list[Detection]) -> None:
     for d in detections:
         tag = f" [ENDANGERED {STATUSES.get(d.species, '?')}]" if d.species in MOBBERS else ""
-        print(f"{t:8.1f}s  {d.species} ({d.common_name})  {d.confidence:.2f}{tag}", file=sys.stderr, flush=True)
+        print(f"[mic] {t:6.1f}s {d.species} ({d.common_name}) {d.confidence:.2f}{tag}", file=sys.stderr, flush=True)
 
 
 def debug_detections(t: float, detections: list[Detection]) -> None:
     if not detections:
-        print(f"{t:8.1f}s  -", file=sys.stderr, flush=True)
+        print(f"[mic] {t:6.1f}s -", file=sys.stderr, flush=True)
     print_detections(t, detections)
 
 
@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> None:
     def handle_event(event: Event) -> None:
         if event.endangered_species(MOBBERS):
             zip_path = save_event_bundle(event, bundle_dir=BUNDLE_DIR, mobbers=MOBBERS, statuses=STATUSES)
-            print(f"saved endangered bundle: {zip_path}", file=sys.stderr, flush=True)
+            print(f"[bundle] saved {zip_path}", file=sys.stderr, flush=True)
         print_event(event)
 
     try:
