@@ -14,13 +14,20 @@ DEFAULT_MOBBERS_PATHS = (
 )
 
 
-def load_endangered_mobbers(path: str | Path | None = None) -> dict[str, str]:
+def _read_mobbers(path: str | Path | None = None) -> list[dict]:
     candidates = [Path(path)] if path is not None else list(DEFAULT_MOBBERS_PATHS)
     for candidate in candidates:
         if candidate.is_file():
-            items = json.loads(candidate.read_text(encoding="utf-8"))
-            return {row["scientific"]: row["english"] for row in items if "scientific" in row}
-    return {}
+            return [row for row in json.loads(candidate.read_text(encoding="utf-8")) if "scientific" in row]
+    return []
+
+
+def load_endangered_mobbers(path: str | Path | None = None) -> dict[str, str]:
+    return {row["scientific"]: row["english"] for row in _read_mobbers(path)}
+
+
+def load_mobber_statuses(path: str | Path | None = None) -> dict[str, str]:
+    return {row["scientific"]: row["status"] for row in _read_mobbers(path) if row.get("status")}
 
 
 @dataclass

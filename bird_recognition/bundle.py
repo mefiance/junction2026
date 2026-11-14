@@ -9,13 +9,14 @@ import shutil
 import zipfile
 from pathlib import Path
 
-from models import Event, load_endangered_mobbers
+from models import Event, load_endangered_mobbers, load_mobber_statuses
 
 
 def save_event_bundle(
     event: Event,
     bundle_dir: str | Path = "captures",
     mobbers: dict[str, str] | None = None,
+    statuses: dict[str, str] | None = None,
 ) -> Path:
     """Save an Event's metadata.json and photos into a folder and a .zip archive."""
     root = Path(bundle_dir)
@@ -27,6 +28,7 @@ def save_event_bundle(
     event_dir.mkdir(parents=True, exist_ok=True)
 
     lookup = load_endangered_mobbers() if mobbers is None else mobbers
+    status_of = load_mobber_statuses() if statuses is None else statuses
 
     copied_photos: list[str] = []
     for idx, photo_path in enumerate(event.photos, start=1):
@@ -49,6 +51,7 @@ def save_event_bundle(
         "common_name": common_name,
         "confidence": top_det.confidence if top_det else None,
         "is_endangered": bool(species and species in lookup),
+        "status": status_of.get(species) if species else None,
         "weather": event.weather,
     }
 
