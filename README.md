@@ -133,26 +133,6 @@ flowchart LR
     F --> G["6. Package Evidence\nSaves photos + metadata.json into .zip"]
 ```
 
-## Architecture
-
-```mermaid
-flowchart TD
-    subgraph MCU["STM32 MCU"]
-        Thermo["Modulino Thermo"]
-        Buzzer["Modulino Buzzer"]
-    end
-    subgraph Linux["QRB2210 Linux"]
-        Mic["USB Mic"] --> BirdNET["BirdNET AI"]
-        BirdNET -->|all birds| DB[("birds.db")]
-        BirdNET -->|endangered| Trigger["Lure + burst"]
-        Trigger --> Buzzer
-        Trigger --> Cam["USB Camera"]
-        Cam --> Zip["captures.zip"]
-    end
-    Timer["60s Timer"] --> Buzzer
-    Thermo -.-> Trigger
-```
-
 ## Project Structure
 
 ```text
