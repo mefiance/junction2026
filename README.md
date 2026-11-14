@@ -1,5 +1,26 @@
 # Pygmy
 
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph MCU["STM32 MCU (Arduino)"]
+        Thermo["Modulino Thermo\n(Temp & %RH)"]
+        Buzzer["Modulino Buzzer\n(1412 Hz Owl Call)"]
+    end
+
+    subgraph Linux["QRB2210 Linux (Python)"]
+        Mic["USB Mic"] --> BirdNET["BirdNET AI\n(3s chunks)"]
+        Timer["60s Timer"] -->|Bridge RPC| Buzzer
+        BirdNET -->|All birds| DB[("birds.db")]
+        BirdNET -->|Endangered species| Trigger["Lure + 5s Burst"]
+        Trigger -->|Bridge RPC| Buzzer
+        Trigger --> Cam["USB Camera\n(2 fps × 5s)"]
+        Thermo -.->|Safe weather & metadata| Trigger
+        Cam --> Zip["captures/*.zip\n(10 JPGs + metadata.json)"]
+    end
+```
+
 ## Project Structure
 
 ```text
