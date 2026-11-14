@@ -1,6 +1,6 @@
 import json
 
-from models import Detection, Event, load_endangered_mobbers
+from models import Detection, Event, load_endangered_mobbers, load_mobber_statuses
 
 
 def test_json_roundtrip():
@@ -38,6 +38,14 @@ def test_endangered_mobbers_loaded_and_matched():
     assert e.endangered_species(mobbers) == ["Poecile montanus"]
 
 
+def test_every_mobber_has_threatened_status():
+    mobbers = load_endangered_mobbers()
+    statuses = load_mobber_statuses()
+    assert set(statuses) == set(mobbers)
+    assert set(statuses.values()) <= {"CR", "EN", "VU"}
+    assert statuses["Poecile montanus"] == "EN"
+
+
 def test_save_event_bundle_creates_folder_and_zip(tmp_path):
     import zipfile
     from bundle import save_event_bundle
@@ -60,4 +68,5 @@ def test_save_event_bundle_creates_folder_and_zip(tmp_path):
         assert "photo_01.jpg" in names
         meta = json.loads(zf.read("metadata.json").decode("utf-8"))
         assert meta["is_endangered"] is True
+        assert meta["status"] == "EN"
         assert meta["weather"]["temperature_c"] == 8.5

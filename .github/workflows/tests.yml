@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
-      - run: pip install -r requirements-dev.txt
+      - run: pip install pytest numpy soundfile
       - run: pytest -m "not birdnet" -v
 
   birdnet:
@@ -28,5 +28,5 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: pip install -r requirements.txt
       - run: pytest -m birdnet -v -s
