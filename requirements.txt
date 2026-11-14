@@ -1,0 +1,5 @@
+birdnet==1.4.0
+ai-edge-litert>=2.0.2
+sounddevice>=0.5
+soundfile>=0.12
+numpy>=1.22
