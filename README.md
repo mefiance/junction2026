@@ -1,6 +1,6 @@
 # Pygmy
 
-**Edge-AI forest node that whistles to attract endangered birds into camera range to generate conservation proof and protect forests**  
+**Edge-AI box that hoots like a small owl so endangered birds come out and help save their own forest**  
 *named after Pygmy owls*
 
 <p align="center">
