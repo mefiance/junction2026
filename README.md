@@ -4,7 +4,8 @@
 *named after Pygmy owls*
 
 <p align="center">
-  <img src="media/pygmy_owl_closeup.jpg" width="300" alt="Eurasian Pygmy Owl" />
+  <img src="media/erik_karits-bird-7236612_1280.jpg" width="450" alt="Eurasian Pygmy Owl" /><br>
+  <em>by Erik_Karits <a href="https://pixabay.com/photos/bird-owl-ornithology-species-fauna-7236612">https://pixabay.com/photos/bird-owl-ornithology-species-fauna-7236612</a></em>
 </p>
 
 We're developing an edge-AI node using Arduino Q to protect endangered bird species and stop harmful forest cutting.
