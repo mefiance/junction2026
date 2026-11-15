@@ -133,7 +133,7 @@ flowchart LR
     E --> F["5. Capture Proof\nUSB Camera takes 5s photo burst"]
     F --> G["6. Package Evidence\nSaves photos + metadata.json into .zip"]
 ```
-
+<!--
 ## Project Structure
 
 ```text
@@ -160,4 +160,4 @@ flowchart LR
 │   └── vision.py
 ├── sync-to-board.sh      # Push local git repo changes to the connected UNO Q
 └── sync-from-board.sh    # Pull changes made in Arduino App Lab back to local git repo
-```
+```-->
